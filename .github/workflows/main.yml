@@ -1,5 +1,4 @@
-# Copyright 2026 The ODML Authors.
-#
+# Copyright 2026 The ODML Authors.                      #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -23,12 +22,26 @@ on:
     branches:
       - main
       - master
-  workflow_dispatch:
-    inputs:
+  workflow_dispatch:                                        inputs:
+      build_litert_lm:
+        description: 'Build Google LiteRT-LM wheels'
+        required: true
+        default: true
+        type: boolean
       git_ref:
-        description: 'Google LiteRT-LM official repository tag, branch, or commit to build (e.g., v0.8.0, main)'
+        description: 'Google LiteRT-LM official repository tag/branch to build (e.g., v0.8.0, main)'
         required: true
         default: 'main'
+        type: string
+      build_hf_xet:
+        description: 'Build Hugging Face hf-xet wheel'
+        required: true
+        default: true
+        type: boolean
+      hf_xet_ref:
+        description: 'Hugging Face xet-core official repository tag/branch to build (e.g., v1.4.3, main)'
+        required: true
+        default: 'v1.4.3'
         type: string
       python_versions:
         description: 'Python version(s) to build (e.g., 3.12 or comma-separated list like 3.10,3.11,3.12)'
@@ -54,48 +67,54 @@ jobs:
       python-matrix: ${{ steps.set-matrix.outputs.python-matrix }}
       first-python-version: ${{ steps.set-matrix.outputs.first-python-version }}
       git-ref: ${{ steps.set-ref.outputs.git-ref }}
+      hf-xet-ref: ${{ steps.set-ref.outputs.hf-xet-ref }}
     steps:
       - id: set-matrix
         run: |
           # Default python versions for automatic triggers
           INPUT_VERSIONS="3.13,3.14"
-          
+
           # Override if manually triggered
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             if [ -n "${{ github.event.inputs.python_versions }}" ]; then
               INPUT_VERSIONS="${{ github.event.inputs.python_versions }}"
             fi
           fi
-          
+
           # Convert comma-separated string to JSON array dynamically using jq
           JSON_ARRAY=$(echo "$INPUT_VERSIONS" | jq -c -R 'split(",")')
           echo "python-matrix=${JSON_ARRAY}" >> $GITHUB_OUTPUT
-          
+
           # Dynamically determine the first version to build CLI & Builder once
           FIRST_VERSION=$(echo "$JSON_ARRAY" | jq -r '.[0]')
           echo "first-python-version=${FIRST_VERSION}" >> $GITHUB_OUTPUT
-          
+
       - id: set-ref
         run: |
-          # Default to official main branch on push/pull_request events
+          # Default to official main branches on push/pull_request events
           GIT_REF="main"
-          
+          HF_XET_REF="v1.4.3"
+
           # Override with user specified tag/branch if manually triggered
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             if [ -n "${{ github.event.inputs.git_ref }}" ]; then
               GIT_REF="${{ github.event.inputs.git_ref }}"
             fi
+            if [ -n "${{ github.event.inputs.hf_xet_ref }}" ]; then
+              HF_XET_REF="${{ github.event.inputs.hf_xet_ref }}"
+            fi
           fi
           echo "git-ref=${GIT_REF}" >> $GITHUB_OUTPUT
+          echo "hf-xet-ref=${HF_XET_REF}" >> $GITHUB_OUTPUT
 
   build-android-wheels:
-    name: "Build Android AArch64 Wheels - Py ${{ matrix.python-version }}"
-    needs: setup
+    name: "Build Android AArch64 Wheels - Py ${{ matrix.python-version }}"                                          needs: setup
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.build_litert_lm == 'true' }}
     runs-on: ubuntu-latest
     env:
       DEV_BUILD: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.is_nightly == 'true') && '1' || '0' }}
       PUBLISH_TO_PYPI: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_to_pypi == 'true') && 'true' || 'false' }}
-    
+
     strategy:
       fail-fast: false
       matrix:
@@ -148,9 +167,8 @@ jobs:
         run: |
           PYTHON_VERSION=${{ matrix.python-version }}
           DATE=$(TZ=America/Los_Angeles date +'%Y%m%d')
-          
-          echo "Building target //python/litert_lm:wheel for Python ${PYTHON_VERSION}"
-          
+
+          echo "Building target //python/litert_lm:wheel for Python ${PYTHON_VERSION}"                          
           bazel build \
             --repo_env=HERMETIC_PYTHON_VERSION=${PYTHON_VERSION} \
             --@rules_python//python/config_settings:python_version=${PYTHON_VERSION} \
@@ -168,20 +186,17 @@ jobs:
         if: matrix.python-version == needs.setup.outputs.first-python-version
         run: |
           DATE=$(TZ=America/Los_Angeles date +'%Y%m%d')
-          
+
           # Build CLI
-          echo "Building CLI wheel: //python/litert_lm_cli:wheel"
-          bazel build \
+          echo "Building CLI wheel: //python/litert_lm_cli:wheel"                                                         bazel build \
             --define=DEV_BUILD=${{ env.DEV_BUILD }} \
             --define=DEV_VERSION=${DATE} \
             -c opt //python/litert_lm_cli:wheel
-          
-          # Build Builder
-          echo "Building Builder wheel: //python/litert_lm_builder:wheel"
+
+          # Build Builder                                         echo "Building Builder wheel: //python/litert_lm_builder:wheel"
           bazel build \
             --define=DEV_BUILD=${{ env.DEV_BUILD }} \
-            --define=DEV_VERSION=${DATE} \
-            -c opt //python/litert_lm_builder:wheel
+            --define=DEV_VERSION=${DATE} \                          -c opt //python/litert_lm_builder:wheel
 
       # Step 9: Collect and stage all generated wheels
       - name: Collect Wheels
@@ -217,6 +232,46 @@ jobs:
       # Step 11: Publish package to PyPI (Runs only on workflow_dispatch with publish flag)
       - name: Publish to PyPI
         if: env.PUBLISH_TO_PYPI == 'true' && github.event_name == 'workflow_dispatch'
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_UPLOAD_TOKEN }}
+        run: |
+          find dist -name "*.whl" -exec uv publish {} \;
+
+  build-hf-xet-wheel:
+    name: "Build hf-xet Android AArch64 Wheel"
+    needs: setup
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.build_hf_xet == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      # Step 1: Checkout the official Hugging Face xet-core repository
+      - name: Checkout huggingface/xet-core
+        uses: actions/checkout@v4
+        with:
+          repository: 'huggingface/xet-core'
+          ref: ${{ needs.setup.outputs.hf-xet-ref }}
+          submodules: recursive
+
+      # Step 2: Build the hf-xet Python wheel for Android aarch64 using Maturin
+      - name: Build hf-xet Wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: aarch64-linux-android
+          args: --release --out dist --manifest-path hf_xet/Cargo.toml --features openssl/vendored
+
+      # Step 3: Upload the hf-xet wheel as artifact
+      - name: Upload hf-xet Wheel as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hf-xet-wheel-android-aarch64
+          path: dist/*.whl
+
+      # Step 4: Publish hf-xet wheel to PyPI (Runs only on workflow_dispatch with publish flag)
+      - name: Install uv
+        if: github.event.inputs.publish_to_pypi == 'true' && github.event_name == 'workflow_dispatch'
+        uses: astral-sh/setup-uv@v5
+
+      - name: Publish to PyPI
+        if: github.event.inputs.publish_to_pypi == 'true' && github.event_name == 'workflow_dispatch'
         env:
           UV_PUBLISH_TOKEN: ${{ secrets.PYPI_UPLOAD_TOKEN }}
         run: |
