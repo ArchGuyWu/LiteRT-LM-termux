@@ -187,10 +187,23 @@ jobs:
       - name: Collect Wheels
         run: |
           mkdir -p dist/
-          echo "Searching for wheels in bazel-bin..."
-          # Use find -L to follow symbolic links of bazel-bin
-          find -L bazel-bin -name "*.whl" -not -path "*/.venv/*" -not -path "*/venv/*" -exec cp -v {} dist/ \;
-          
+
+          # Dynamic scan of bazel output directories (including bazel-out for cross-compilation)
+          SEARCH_PATHS=""
+          for p in "bazel-bin" "bazel-out" "LiteRT-LM/bazel-bin" "LiteRT-LM/bazel-out"; do
+            if [ -e "$p" ]; then
+              SEARCH_PATHS="$SEARCH_PATHS $p"
+            fi
+          done
+
+          if [ -n "$SEARCH_PATHS" ]; then
+            echo "Searching for wheels in: $SEARCH_PATHS"
+            find -L $SEARCH_PATHS -name "*.whl" -not -path "*/.venv/*" -not -path "*/venv/*" -exec cp -v {} dist/ \;
+          else
+            echo "Warning: No bazel output directories found! Searching entire directory..."
+            find -L . -name "*.whl" -not -path "*/.venv/*" -not -path "*/venv/*" -exec cp -v {} dist/ \;
+          fi
+
           echo "Collected wheels:"
           ls -la dist/
 
