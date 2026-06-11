@@ -180,6 +180,9 @@ jobs:
           echo "Building target //python/litert_lm:wheel for Python ${PYTHON_VERSION}"
 
           bazel build --repo_env=HERMETIC_PYTHON_VERSION=${PYTHON_VERSION} --@rules_python//python/config_settings:python_version=${PYTHON_VERSION} --define=DEV_BUILD=${{ env.DEV_BUILD }} --define=DEV_VERSION=${DATE} --define=litert_link_capi_so=true --define=resolve_symbols_in_exec=false --config=android_arm64 -c opt //python/litert_lm:wheel
+          echo "=== DEBUG: Shared Libraries Compiled ==="
+          find bazel-bin/ -name "*.so" || true
+          find bazel-out/ -name "*.so" || true
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
 
