@@ -109,7 +109,8 @@ jobs:
           echo "hf-xet-ref=${HF_XET_REF}" >> $GITHUB_OUTPUT
 
   build-android-wheels:
-    name: "Build Android AArch64 Wheels - Py ${{ matrix.python-version }}"                                          needs: setup
+    name: "Build Android AArch64 Wheels - Py ${{ matrix.python-version }}"                                          
+    needs: setup
     if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.build_litert_lm == 'true' }}
     runs-on: ubuntu-latest
     env:
