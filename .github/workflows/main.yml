@@ -253,13 +253,17 @@ jobs:
           ref: ${{ needs.setup.outputs.hf-xet-ref }}
           submodules: recursive
 
-      # Step 2: Build the hf-xet Python wheel for Android aarch64 using Maturin
-      - name: Build hf-xet Wheel
-        uses: PyO3/maturin-action@v1
+      # Step 2: Force openssl to compile in vendored mode for cross-compilation
+      - name: Force Vendored OpenSSL
+        run: |                                                   
+          # Append openssl dependency with vendored feature directly to hf_xet Cargo.toml                                 
+          echo 'openssl = { version = "0.10", features = ["vendored"] }' >> hf_xet/Cargo.toml                   
+      # Step 3: Build the hf-xet Python wheel for Android aarch64 using Maturin
+      - name: Build hf-xet Wheel                                
+        uses: PyO3/maturin-action@v1                            
         with:
-          target: aarch64-linux-android
-          args: --release --out dist --manifest-path hf_xet/Cargo.toml --features openssl/vendored
-
+          target: aarch64-linux-android                           
+          args: --release --out dist --manifest-path hf_xet/Cargo.toml
       # Step 3: Upload the hf-xet wheel as artifact
       - name: Upload hf-xet Wheel as Artifact
         uses: actions/upload-artifact@v4
