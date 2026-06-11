@@ -22,11 +22,12 @@ on:
     branches:
       - main
       - master
-  workflow_dispatch:                                        inputs:
+  workflow_dispatch:
+    inputs:
       build_litert_lm:
         description: 'Build Google LiteRT-LM wheels'
         required: true
-        default: 'true'
+        default: true
         type: boolean
       git_ref:
         description: 'Google LiteRT-LM official repository tag/branch to build (e.g., v0.8.0, main)'
@@ -36,7 +37,7 @@ on:
       build_hf_xet:
         description: 'Build Hugging Face hf-xet wheel'
         required: true
-        default: 'true'
+        default: true
         type: boolean
       hf_xet_ref:
         description: 'Hugging Face xet-core official repository tag/branch to build (e.g., v1.4.3, main)'
@@ -51,12 +52,12 @@ on:
       is_nightly:
         description: 'Whether to build the nightly package (sets DEV_BUILD=1)'
         required: true
-        default: 'false'
+        default: false
         type: boolean
       publish_to_pypi:
         description: 'Publish wheels to PyPI'
         required: true
-        default: 'false'
+        default: false
         type: boolean
 
 jobs:
